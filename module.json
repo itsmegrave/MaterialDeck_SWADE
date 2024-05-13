@@ -1,0 +1,36 @@
+{
+    "id": "materialdeck-swade",
+    "title": "Material Deck - SWADE",
+    "description": "This module adds support for 'Savage Worlds Adventure Edition' to Material Deck.",
+    "version": "1.0.0",
+    "authors": [
+        {
+            "name": "itsmegrave",
+            "discord": "itsmegrave"
+        }
+    ],
+    "esmodules": [
+        "./materialdeck-swade.js"
+    ],
+    "relationships": {
+        "requires": [
+            {
+                "id": "MaterialDeck",
+                "type": "module",
+                "manifest": "https://github.com/MaterialFoundry/MaterialDeck/releases/latest/download/module.json",
+                "compatibility": {
+                    "minimum": "1.7.1",
+                    "verified": "1.7.1"
+                }
+            }
+        ]
+    },
+    "compatibility": {
+        "minimum": "10",
+        "verified": "11"
+    },
+    "manifestPlusVersion": "1.1.0",
+    "url": "https://github.com/itsmegrave/MaterialDeck_SWADE",
+    "manifest": "https://github.com/itsmegrave/MaterialDeck_SWADE/releases/latest/download/module.json",
+    "download": "https://github.com/itsmegrave/MaterialDeck_SWADE/releases/download/v1.0.1/module.zip"
+}
