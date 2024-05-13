@@ -29,7 +29,7 @@ jobs:
       - name: Extract FoundryVTT id
         id: get_id
         run: |
-          value=$(jq -r '.id' src/${{ env.package_type }}.json)
+          value=$(jq -r '.id' ${{ env.package_type }}.json)
           echo "id is $value"
           echo "id=$value" >> "$GITHUB_OUTPUT"
 
