@@ -1,4 +1,4 @@
-name: Release
+name: Release Creation
 
 on:
   release:
@@ -12,87 +12,19 @@ env:
   fvtt_dry_run: false
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.node_version }}
-
-      - name: Cache Node.js modules
-        uses: actions/cache@v3
-        with:
-          path: .npm
-          key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.OS }}-node-
-            ${{ runner.OS }}-
-
-      - name: Install dependencies
-        run: npm ci --cache .npm --prefer-offline
-
-      - name: Lint
-        run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.node_version }}
-
-      - name: Cache Node.js modules
-        uses: actions/cache@v3
-        with:
-          path: .npm
-          key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.OS }}-node-
-            ${{ runner.OS }}-
-
-      - name: Install dependencies
-        run: npm ci --cache .npm --prefer-offline
-
-      - name: Typecheck
-        run: npm run typecheck
-
   build:
     runs-on: ubuntu-latest
     outputs:
       id: ${{ steps.get_id.outputs.id }}
       version-without-v: ${{ steps.get_version.outputs.version-without-v }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v2
 
-      - name: Install node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.node_version }}
-
-      - name: Cache Node.js modules
-        uses: actions/cache@v3
-        with:
-          path: .npm
-          key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.OS }}-node-
-            ${{ runner.OS }}-
-
-      - name: Install dependencies
-        run: npm ci --cache .npm --prefer-offline
-
+      # get part of the tag after the `v`
       - name: Extract tag version number
         id: get_version
-        uses: battila7/get-version-action@v2.2.1
+        uses: battila7/get-version-action@v2
+      - run: echo ${{ steps.get_version.outputs.version-without-v }}
 
       - name: Extract FoundryVTT id
         id: get_id
@@ -101,61 +33,34 @@ jobs:
           echo "id is $value"
           echo "id=$value" >> "$GITHUB_OUTPUT"
 
+      # Substitute the Manifest and Download URLs in the module.json
       - name: Substitute Manifest and Download Links For Versioned Ones
         id: sub_manifest_link_version
         uses: microsoft/variable-substitution@v1
         with:
-          files: "src/${{ env.package_type }}.json"
+          files: "${{ env.package_type }}.json"
         env:
-          version: ${{ steps.get_version.outputs.version-without-v }}
-          url: https://github.com/${{ github.repository }}
-          manifest: https://github.com/${{ github.repository }}/releases/latest/download/${{ steps.get_id.outputs.id }}.json
-          download: https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/${{ steps.get_id.outputs.id }}.zip
+          version: ${{steps.get_version.outputs.version-without-v}}
+          url: https://github.com/${{github.repository}}
+          manifest: https://github.com/${{github.repository}}/releases/latest/download/module.json
+          download: https://github.com/${{github.repository}}/releases/download/${{github.event.release.tag_name}}/module.zip
 
-      - name: Build
-        run: npm run build
+      # Create a zip file with all files required by the module to add to the release
+      - run: zip -r ./module.zip materialdeck-template.js module.json README.md changelog.md LICENSE
 
-      - name: Archive production artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: dist
-          path: dist
-
-  publish:
-    needs:
-      - lint
-      - typecheck
-      - build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download production artifacts for publication
-        uses: actions/download-artifact@v3
-        with:
-          name: dist
-          path: dist
-
-      - name: Create zip file
-        working-directory: ./dist
-        run: zip -r ../${{ needs.build.outputs.id }}.zip .
-
-      - name: Copy manifest for vanity artifact name
-        run: cp ./dist/${{ env.package_type }}.json ./dist/${{ needs.build.outputs.id }}.json
-
-      - name: Create release
+      # Create a release for this specific version
+      - name: Update Release with Files
         id: create_version_release
         uses: ncipollo/release-action@v1
         with:
-          allowUpdates: true
+          allowUpdates: true # Set this to false if you want to prevent updating existing releases
           name: ${{ github.event.release.name }}
+          draft: ${{ github.event.release.unpublished }}
+          prerelease: ${{ github.event.release.prerelease }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          artifacts: "./dist/${{ needs.build.outputs.id }}.json, ./${{ needs.build.outputs.id }}.zip"
+          artifacts: "./module.json, ./module.zip"
+          tag: ${{ github.event.release.tag_name }}
           body: ${{ github.event.release.body }}
-
       - name: Submit package to FoundryVTT Package Release API
         run: |
           curl -X POST "https://api.foundryvtt.com/_api/packages/release_version/" \
@@ -166,11 +71,11 @@ jobs:
               "dry-run": ${{ env.fvtt_dry_run }},
               "release": {
                 "version": "${{ needs.build.outputs.version-without-v }}",
-                "manifest": "https://github.com/${{ github.repository }}/releases/download/${{ needs.build.outputs.version-without-v }}/${{ needs.build.outputs.id }}.json",
-                "notes": "https://github.com/${{ github.repository }}/releases/tag/${{ needs.build.outputs.version-without-v }}",
-                "compatibility": {
-                  "minimum": "${{ env.fvtt_minimum }}",
-                  "verified": "${{ env.fvtt_verified }}"
+                "manifest": "https://github.com/${{ github.repository }}/releases/download/${{needs.build.outputs.version-without-v }}/${{ needs.build.outputs.id }}.json",
+                  "notes": "https://github.com/${{ github.repository }}/releases/tag/${{ needs.build.outputs.version-without-v }}",
+                  "compatibility": {
+                    "minimum": "${{ env.fvtt_minimum }}",
+                    "verified": "${{ env.fvtt_verified }}"
+                  }
                 }
-              }
-            }'
+              }'
